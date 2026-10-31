@@ -1,7 +1,7 @@
 {
   "name": "kickterino",
   "productName": "Kickterino",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Cliente multi-chat da Kick (estilo Chatterino) que mantém você assistindo várias lives para acumular pontos do canal.",
   "author": "VinniiSaantos",
   "license": "MIT",
@@ -22,9 +22,23 @@
   "build": {
     "appId": "com.vinniisaantos.kickterino",
     "productName": "Kickterino",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "publish": [{ "provider": "github", "owner": "ViinniSantoos", "repo": "kickterino" }],
-    "files": ["main.js", "preload.js", "renderer/**/*", "build/icon.png"],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ViinniSantoos",
+        "repo": "kickterino"
+      }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "build/icon.png"
+    ],
     "electronFuses": {
       "enableCookieEncryption": true,
       "runAsNode": false,
@@ -33,7 +47,10 @@
       "onlyLoadAppFromAsar": true
     },
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.png"
     },
     "nsis": {
@@ -45,6 +62,8 @@
       "shortcutName": "Kickterino",
       "runAfterFinish": true
     },
-    "portable": { "artifactName": "Kickterino-portatil.exe" }
+    "portable": {
+      "artifactName": "Kickterino-portatil.exe"
+    }
   }
 }
