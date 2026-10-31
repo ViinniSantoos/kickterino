@@ -1,0 +1,23 @@
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('kick', {
+  getState: () => ipcRenderer.invoke('state:get'),
+  addChannel: (slug) => ipcRenderer.invoke('channels:add', slug),
+  removeChannel: (slug) => ipcRenderer.invoke('channels:remove', slug),
+  setFarming: (on) => ipcRenderer.invoke('farming:set', on),
+  setMaxWatchers: (n) => ipcRenderer.invoke('maxWatchers:set', n),
+  setRotation: (on) => ipcRenderer.invoke('rotation:set', on),
+  setAutostart: (on) => ipcRenderer.invoke('autostart:set', on),
+  setNotifyBonus: (on) => ipcRenderer.invoke('notifyBonus:set', on),
+  startLimitTest: () => ipcRenderer.invoke('limitTest:start'),
+  stopLimitTest: () => ipcRenderer.invoke('limitTest:stop'),
+  setLowQuality: (on) => ipcRenderer.invoke('lowQuality:set', on),
+  refresh: () => ipcRenderer.invoke('refresh'),
+  openStore: (slug) => ipcRenderer.invoke('store:open', slug),
+  showLogin: () => ipcRenderer.invoke('login:show'),
+  logout: () => ipcRenderer.invoke('logout'),
+  showChannel: (slug) => ipcRenderer.invoke('channel:show', slug),
+  sendChat: (chatroomId, content) => ipcRenderer.invoke('chat:send', { chatroomId, content }),
+  onStatus: (cb) => ipcRenderer.on('status', (_e, s) => cb(s)),
+  onChat: (cb) => ipcRenderer.on('chat', (_e, m) => cb(m)),
+});

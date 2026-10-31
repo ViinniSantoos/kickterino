@@ -1,0 +1,50 @@
+{
+  "name": "kickterino",
+  "productName": "Kickterino",
+  "version": "0.2.0",
+  "description": "Cliente multi-chat da Kick (estilo Chatterino) que mantém você assistindo várias lives para acumular pontos do canal.",
+  "author": "VinniiSaantos",
+  "license": "MIT",
+  "homepage": "https://viinnisantoos.github.io/kickterino/",
+  "repository": "github:ViinniSantoos/kickterino",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.vinniisaantos.kickterino",
+    "productName": "Kickterino",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "publish": [{ "provider": "github", "owner": "ViinniSantoos", "repo": "kickterino" }],
+    "files": ["main.js", "preload.js", "renderer/**/*", "build/icon.png"],
+    "electronFuses": {
+      "enableCookieEncryption": true,
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "onlyLoadAppFromAsar": true
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "artifactName": "Kickterino-Setup.exe",
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kickterino",
+      "runAfterFinish": true
+    },
+    "portable": { "artifactName": "Kickterino-portatil.exe" }
+  }
+}
