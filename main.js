@@ -26,6 +26,7 @@ if (process.env.KICKTERINO_DATA) app.setPath('userData', process.env.KICKTERINO_
 const PARTITION = 'persist:kick';
 const KICK = 'https://kick.com';
 const POLL_MS = 60 * 1000;
+const PLAYER_CHECK_MS = 30 * 1000;
 
 const configPath = () => path.join(app.getPath('userData'), 'config.json');
 const DEFAULT_CONFIG = {
@@ -398,14 +399,18 @@ async function checkPlayers() {
   for (const [slug, win] of watchers) {
     const s = status.get(slug);
     if (!s || win.isDestroyed() || userOpened.has(win)) continue;
-    const info = await win.webContents.executeJavaScript(`(() => {
+    const info = await withTimeout(win.webContents.executeJavaScript(`(() => {
       const v = document.querySelector('video');
       return {
         gate: !!document.querySelector('[data-testid="mature"]'),
         visibility: document.visibilityState,
         video: v ? { paused: v.paused, time: Math.round(v.currentTime), height: v.videoHeight, ready: v.readyState } : null,
       };
-    })()`).catch(() => null);
+    })()`), PLAYER_CHECK_MS).catch((err) => {
+      // Página congelada não responde nunca: fecha, e a próxima rodada abre de novo (ou põe outra live).
+      if (err.message === 'timeout' && watchers.get(slug) === win) stopWatcher(slug);
+      return null;
+    });
     if (!info) continue;
     s.ageGate = info.gate;
     s.visibility = info.visibility;
@@ -643,11 +648,16 @@ function snapshot() {
   };
 }
 
+// Uma rodada presa não pode parar o app: passado esse tempo, a seguinte começa mesmo assim.
+const POLL_STUCK_MS = 5 * 60 * 1000;
 let polling = false;
+let pollStartedAt = 0;
 let loggedIn = false;
 async function poll() {
-  if (polling) return;
+  if (polling && Date.now() - pollStartedAt < POLL_STUCK_MS) return;
+  const startedAt = Date.now();
   polling = true;
+  pollStartedAt = startedAt;
   try {
     loggedIn = !!(await sessionToken());
     await withTimeout(apiReady, 5 * 1000); // sem a página da Kick não há o que consultar agora
@@ -673,7 +683,7 @@ async function poll() {
     }
   } catch {
     // Kick ou internet fora do ar: a próxima rodada tenta de novo.
-  } finally { polling = false; }
+  } finally { if (pollStartedAt === startedAt) polling = false; }
 }
 
 // ---------- Modo 24/7 ----------
