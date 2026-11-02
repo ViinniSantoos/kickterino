@@ -14,7 +14,13 @@
     <label class="toggle"><input type="checkbox" id="farming"> Farmar pontos</label>
     <label class="toggle" title="Lives ocultas rodam em 160p, sem imagens: gasta bem menos memória e internet"><input type="checkbox" id="low-quality"> Modo leve (160p)</label>
     <label title="Quantas lives tocam ao mesmo tempo. Nos testes, a Kick só contou pontos em 2 lives por vez: mais que isso gasta memória sem render mais pontos. As outras ficam na fila.">Lives ao mesmo tempo <input type="number" id="max-watchers" min="1" max="30"></label>
-    <label class="toggle" title="Ligado: as vagas vão para os canais mais perto de 300 pontos e, quando um chega lá, passa para o próximo. Desligado: ficam só os primeiros canais da lista."><input type="checkbox" id="rotation"> Foco em bônus</label>
+    <label class="toggle" title="Ligado: as vagas vão para os canais mais perto do bônus escolhido e, quando um chega lá, passa para o próximo. Desligado: ficam só os primeiros canais da lista."><input type="checkbox" id="rotation"> Foco em bônus</label>
+    <label title="Qual bônus o foco deve buscar. Automático: todos chegam a 300, depois 500 e 1.000. Escolhendo um, as vagas juntam pontos até o custo dele nos canais mais perto, e só esse bônus avisa.">Bônus <select id="bonus-target">
+      <option value="0">Automático</option>
+      <option value="300">+15% XP (300)</option>
+      <option value="500">+15% Capture Boost (500)</option>
+      <option value="1000">+15% Secret Lure (1.000)</option>
+    </select></label>
     <label class="toggle" title="Abre sozinho, direto na bandeja, quando o Windows liga"><input type="checkbox" id="autostart"> Iniciar com o Windows</label>
     <label class="toggle" title="Avisa quando um canal alcança 300, 500 ou 1.000 pontos"><input type="checkbox" id="notify-bonus"> Avisar bônus</label>
     <button id="btn-refresh">Atualizar</button>

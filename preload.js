@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('kick', {
   setFarming: (on) => ipcRenderer.invoke('farming:set', on),
   setMaxWatchers: (n) => ipcRenderer.invoke('maxWatchers:set', n),
   setRotation: (on) => ipcRenderer.invoke('rotation:set', on),
+  setBonusTarget: (cost) => ipcRenderer.invoke('bonusTarget:set', cost),
   setAutostart: (on) => ipcRenderer.invoke('autostart:set', on),
   setNotifyBonus: (on) => ipcRenderer.invoke('notifyBonus:set', on),
   startLimitTest: () => ipcRenderer.invoke('limitTest:start'),

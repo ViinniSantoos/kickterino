@@ -40,6 +40,7 @@ const DEFAULT_CONFIG = {
   maxWatchers: 2,
   lowQuality: true,
   rotation: true,
+  bonusTarget: 0, // 0 = automático (300, 500, 1.000); ou o custo do único bônus que a pessoa quer
   notifyBonus: true,
 };
 let config = { ...DEFAULT_CONFIG };
@@ -348,7 +349,8 @@ function notify(title, body, onClick) {
 
 function checkBonus(slug, s) {
   const tier = BONUSES.filter((b) => s.points >= b.cost).length;
-  if (s.bonusTier != null && tier > s.bonusTier && config.notifyBonus) {
+  const wanted = !config.bonusTarget || (tier && BONUSES[tier - 1].cost === config.bonusTarget);
+  if (s.bonusTier != null && tier > s.bonusTier && config.notifyBonus && wanted) {
     notify(`${s.displayName || slug}: ${s.points} pontos`, `Já dá para resgatar ${BONUSES[tier - 1].name}. Clique para abrir a loja.`, () => openStore(slug));
   }
   s.bonusTier = tier;
@@ -464,6 +466,12 @@ const IDLE_COOLDOWN_MS = 30 * 60 * 1000;
 
 function goalRank(points) {
   const p = points || 0;
+  // Bônus escolhido: junta pontos até o custo dele; quem já chegou cede a vaga para o próximo canal.
+  if (config.bonusTarget) {
+    const tier = Math.floor(p / config.bonusTarget);
+    const goal = (tier + 1) * config.bonusTarget;
+    return { tier, goal, left: goal - p };
+  }
   // Passou de 1.000: cada milhar é uma meta nova, então ninguém dispara na frente dos outros.
   const thousands = Math.floor(p / 1000);
   const tier = thousands ? BONUSES.length - 1 + thousands : BONUSES.filter((b) => p >= b.cost).length;
@@ -625,6 +633,7 @@ function snapshot() {
     maxWatchers: config.maxWatchers,
     lowQuality: config.lowQuality,
     rotation: config.rotation,
+    bonusTarget: config.bonusTarget,
     limitTest: limitTestSnapshot(),
     limitResult: config.limitResult || null,
     openAtLogin: isOpenAtLogin(),
@@ -775,6 +784,12 @@ ipcMain.handle('maxWatchers:set', (_e, n) => {
   config.maxWatchers = Math.max(1, Math.min(30, Number(n) || 1)); saveConfig(); reconcileWatchers(); return snapshot();
 });
 ipcMain.handle('rotation:set', (_e, on) => { limitTest = null; config.rotation = !!on; saveConfig(); reconcileWatchers(); return snapshot(); });
+ipcMain.handle('bonusTarget:set', (_e, cost) => {
+  config.bonusTarget = BONUSES.some((b) => b.cost === cost) ? cost : 0;
+  saveConfig();
+  reconcileWatchers();
+  return snapshot();
+});
 ipcMain.handle('limitTest:start', () => {
   if (!loggedIn && !process.env.KICKTERINO_LIMIT_AUTOSTART) return snapshot(); // sem login a Kick não dá pontos: o teste não mediria nada
   startLimitTest(); reconcileWatchers(); return snapshot(); });

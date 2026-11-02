@@ -219,6 +219,8 @@ function applyState(s) {
   $('#farming').checked = state.farming;
   $('#low-quality').checked = state.lowQuality;
   $('#rotation').checked = state.rotation;
+  $('#bonus-target').value = String(state.bonusTarget || 0);
+  $('#bonus-target').disabled = !state.rotation;
   $('#autostart').checked = !!state.openAtLogin;
   $('#notify-bonus').checked = !!state.notifyBonus;
   $('#memory').textContent = state.memoryMB ? `${state.memoryMB} MB` : '';
@@ -240,6 +242,7 @@ $('#btn-limit').onclick = async () => applyState(await (state.limitTest ? window
 $('#autostart').onchange = async (e) => applyState(await window.kick.setAutostart(e.target.checked));
 $('#notify-bonus').onchange = async (e) => applyState(await window.kick.setNotifyBonus(e.target.checked));
 $('#rotation').onchange = async (e) => applyState(await window.kick.setRotation(e.target.checked));
+$('#bonus-target').onchange = async (e) => applyState(await window.kick.setBonusTarget(Number(e.target.value)));
 $('#low-quality').onchange = async (e) => applyState(await window.kick.setLowQuality(e.target.checked));
 $('#max-watchers').onchange = async (e) => applyState(await window.kick.setMaxWatchers(e.target.value));
 $('#btn-panel').onclick = () => {
