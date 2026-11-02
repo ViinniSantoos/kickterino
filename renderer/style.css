@@ -108,6 +108,7 @@ main { flex: 1; display: flex; min-height: 0; }
 #panel { display: flex; flex-direction: column; }
 #panel table { flex-shrink: 0; }
 .follow { color: var(--kick); font-size: 11px; }
+.sub { color: #c58bff; font-size: 10px; font-weight: 700; }
 .pill.warming { background: #2f4a1f; color: var(--kick); }
 #limit-box { margin: 10px 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 #limit-box button { align-self: flex-start; }

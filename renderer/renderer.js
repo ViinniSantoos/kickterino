@@ -195,6 +195,7 @@ function renderPanel() {
     if (ch.gained > 0) tdPts.append(' ', el('span', 'gain', `+${ch.gained}`));
     const tdName = el('td', null, ch.displayName);
     if (ch.following) { const f = el('span', 'follow', ' ♥'); f.title = 'Você segue este canal'; tdName.append(f); }
+    if (ch.subscribed) { const b = el('span', 'sub', ' SUB'); b.title = 'Você é sub: pontos em dobro aqui. Com o foco ligado, este canal vem primeiro enquanto estiver ao vivo.'; tdName.append(b); }
     tr.append(tdName, tdStatus, tdPts, el('td', null, `${ch.watchedMin} min`));
     tr.style.cursor = 'pointer';
     tr.onclick = () => select(ch.slug);

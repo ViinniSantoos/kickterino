@@ -374,6 +374,8 @@ async function refreshChannel(slug) {
   try {
     const { status: code, json } = await kickFetch(`/api/v2/channels/${slug}/me`);
     if (code === 200 && json && typeof json.is_following === 'boolean') s.following = json.is_following;
+    // Quem é sub ganha o dobro de pontos naquele canal (20 a cada 5 min).
+    if (code === 200 && json && 'subscription' in json) s.subscribed = !!json.subscription;
   } catch {}
   // Saldo de pontos — endpoint não documentado; se falhar, só mostramos "—".
   try {
@@ -441,7 +443,7 @@ function logHistory() {
     if (!s.live && s.points == null) continue;
     channels[slug] = {
       live: !!s.live, watching: watchers.has(slug), points: s.points ?? null, following: s.following ?? null,
-      earning: earningState(slug, now), video: s.video || null, visibility: s.visibility || null,
+      subscribed: !!s.subscribed, earning: earningState(slug, now), video: s.video || null, visibility: s.visibility || null,
       gate: !!s.ageGate, watchedMin: Math.floor(totalWatched(slug, now) / 60000),
     };
   }
@@ -461,6 +463,7 @@ function logHistory() {
 // vão para quem está mais perto do próximo bônus, e todos os canais ao vivo chegam a 300 antes
 // de alguém buscar 500, depois 1.000 e cada milhar seguinte. Cada troca perde ~6–7 min até a primeira contagem, por isso só troca
 // quando o canal bateu a meta ou quando a diferença compensa (SWITCH_MARGIN).
+// Canal com sub rende o dobro: entra na frente de todos e fica enquanto estiver ao vivo, sem meta.
 const SWITCH_MARGIN = 50;
 const IDLE_COOLDOWN_MS = 30 * 60 * 1000;
 
@@ -481,11 +484,12 @@ function goalRank(points) {
 
 const compareGoal = (a, b) => {
   const ra = goalRank(a.points), rb = goalRank(b.points);
-  return !!a.cooling - !!b.cooling || ra.tier - rb.tier || ra.left - rb.left;
+  return !!a.cooling - !!b.cooling || !!b.sub - !!a.sub || ra.tier - rb.tier || ra.left - rb.left;
 };
 
 function worthSwitching(candidate, current) {
-  if (candidate.cooling) return false;
+  if (candidate.cooling || current.sub) return false;
+  if (candidate.sub) return true;
   const c = goalRank(candidate.points), w = goalRank(current.points);
   return c.tier < w.tier || (c.tier === w.tier && c.left + SWITCH_MARGIN < w.left);
 }
@@ -516,6 +520,7 @@ function reconcileWatchers() {
   for (const slug of [...watchers.keys()]) {
     if (isShown(slug)) continue;
     const idle = loggedIn && !limitTest && config.maxWatchers <= 2 && earningState(slug, now) === 'idle';
+    const s = status.get(slug);
     if (idle && s) s.cooldownUntil = now + IDLE_COOLDOWN_MS; // senão voltaria na mesma hora
     if (idle || turnTime(slug, now) >= RECYCLE_MS) stopWatcher(slug);
   }
@@ -528,7 +533,8 @@ function reconcileWatchers() {
   // Sem foco, as vagas seguem a ordem da lista de canais e ninguém troca de lugar.
   const focusInfo = (slug) => {
     const s = status.get(slug) || {};
-    return { points: s.points, cooling: (s.cooldownUntil || 0) > now };
+    const cooling = (s.cooldownUntil || 0) > now;
+    return { points: s.points, cooling, sub: !!s.subscribed && !cooling };
   };
   const byGoal = (a, b) => compareGoal(focusInfo(a), focusInfo(b));
   const waiting = config.channels.filter((slug) => !watchers.has(slug) && (status.get(slug) || {}).live);
@@ -645,7 +651,7 @@ function snapshot() {
         slug, displayName: s.displayName || slug, live: !!s.live, viewers: s.viewers || 0,
         title: s.title || '', chatroomId: s.chatroomId || null, points: s.points ?? null,
         watching: watchers.has(slug), ageGate: !!s.ageGate, earning: earningState(slug, now),
-        following: s.following ?? null,
+        following: s.following ?? null, subscribed: !!s.subscribed,
         gained: s.gainedTotal || 0,
         goal: s.points != null ? goalRank(s.points).goal : null,
         goalLeft: s.points != null ? goalRank(s.points).left : null,

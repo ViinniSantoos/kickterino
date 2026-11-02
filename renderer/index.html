@@ -14,7 +14,7 @@
     <label class="toggle"><input type="checkbox" id="farming"> Farmar pontos</label>
     <label class="toggle" title="Lives ocultas rodam em 160p, sem imagens: gasta bem menos memória e internet"><input type="checkbox" id="low-quality"> Modo leve (160p)</label>
     <label title="Quantas lives tocam ao mesmo tempo. Nos testes, a Kick só contou pontos em 2 lives por vez: mais que isso gasta memória sem render mais pontos. As outras ficam na fila.">Lives ao mesmo tempo <input type="number" id="max-watchers" min="1" max="30"></label>
-    <label class="toggle" title="Ligado: as vagas vão para os canais mais perto do bônus escolhido e, quando um chega lá, passa para o próximo. Desligado: ficam só os primeiros canais da lista."><input type="checkbox" id="rotation"> Foco em bônus</label>
+    <label class="toggle" title="Ligado: as vagas vão para os canais mais perto do bônus escolhido e, quando um chega lá, passa para o próximo. Canais em que você é sub vêm primeiro enquanto estiverem ao vivo. Desligado: ficam só os primeiros canais da lista."><input type="checkbox" id="rotation"> Foco em bônus</label>
     <label title="Qual bônus o foco deve buscar. Automático: todos chegam a 300, depois 500 e 1.000. Escolhendo um, as vagas juntam pontos até o custo dele nos canais mais perto, e só esse bônus avisa.">Bônus <select id="bonus-target">
       <option value="0">Automático</option>
       <option value="300">+15% XP (300)</option>
@@ -60,7 +60,7 @@
         <button id="btn-limit" title="Abre todas as lives ao vivo e mede quantas a Kick conta; se não forem todas, testa números menores (~20 min por etapa) e ajusta o app para o que rende mais pontos">Descobrir limite de lives</button>
         <div id="limit-info"></div>
       </div>
-      <p class="hint">A Kick dá 10 pontos a cada ~5 min por live, mas só conta cerca de 2 lives por vez por conta. Como o saldo é separado por canal, o padrão é 2 lives com foco em bônus: as vagas vão para quem está mais perto de 300 e, depois que todos chegam lá, de 500 e 1.000. A primeira contagem chega ~6–7 min depois que a live abre (status AQUECENDO).</p>
+      <p class="hint">A Kick dá 10 pontos a cada ~5 min por live, mas só conta cerca de 2 lives por vez por conta. Como o saldo é separado por canal, o padrão é 2 lives com foco em bônus: as vagas vão para quem está mais perto de 300 e, depois que todos chegam lá, de 500 e 1.000. Canais em que você é sub rendem o dobro: têm prioridade e ficam até sair do ar, sem meta de bônus. A primeira contagem chega ~6–7 min depois que a live abre (status AQUECENDO).</p>
     </aside>
   </main>
 
