@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('kick', {
   setRotation: (on) => ipcRenderer.invoke('rotation:set', on),
   setBonusTarget: (cost) => ipcRenderer.invoke('bonusTarget:set', cost),
   setAutostart: (on) => ipcRenderer.invoke('autostart:set', on),
+  quit: () => ipcRenderer.invoke('app:quit'),
   setNotifyBonus: (on) => ipcRenderer.invoke('notifyBonus:set', on),
   startLimitTest: () => ipcRenderer.invoke('limitTest:start'),
   stopLimitTest: () => ipcRenderer.invoke('limitTest:stop'),

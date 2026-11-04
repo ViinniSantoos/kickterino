@@ -87,7 +87,7 @@ main { flex: 1; display: flex; min-height: 0; }
 #input { flex: 1; min-width: 0; background: var(--bg-2); border: 1px solid var(--border); border-radius: 3px; padding: 6px 8px; }
 #input:focus { outline: none; border-color: var(--kick); }
 
-#panel { width: 340px; border-left: 1px solid var(--border); background: var(--bg-2); padding: 10px; overflow-y: auto; }
+#panel { width: 370px; border-left: 1px solid var(--border); background: var(--bg-2); padding: 10px; overflow-y: auto; }
 #panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px; }
 #panel table { width: 100%; border-collapse: collapse; }
 #panel th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; padding: 3px 4px; }

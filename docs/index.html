@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kickterino — chat e pontos da Kick para Windows</title>
+  <title>Kickterino — chat e pontos da Kick para Windows e Linux</title>
   <meta name="description" content="Cliente de chat para a Kick no estilo do Chatterino, com painel de pontos e escolha de bônus para o PokeIdle.">
   <link rel="icon" href="icon.png">
   <link rel="stylesheet" href="style.css">
@@ -26,7 +26,11 @@
         <a class="btn primary" href="https://github.com/ViinniSantoos/kickterino/releases/latest/download/Kickterino-Setup.exe">Baixar para Windows</a>
         <a class="btn" href="https://github.com/ViinniSantoos/kickterino/releases/latest/download/Kickterino-portatil.exe">Versão portátil</a>
       </div>
-      <p class="note">Grátis e de código aberto. Windows 10 ou 11. <a href="https://github.com/ViinniSantoos/kickterino/releases">Todas as versões</a></p>
+      <div class="cta linux">
+        <a class="btn" href="https://github.com/ViinniSantoos/kickterino/releases/latest/download/Kickterino-linux.AppImage">Linux (AppImage)</a>
+        <a class="btn" href="https://github.com/ViinniSantoos/kickterino/releases/latest/download/Kickterino-linux.deb">Linux (.deb)</a>
+      </div>
+      <p class="note">Grátis e de código aberto. Windows 10 ou 11, ou Linux 64 bits. <a href="https://github.com/ViinniSantoos/kickterino/releases">Todas as versões</a></p>
       <img class="shot" src="app.png" alt="Janela do Kickterino com as abas de canais, o chat e o painel de pontos" width="1100" height="720">
     </section>
 
@@ -36,7 +40,7 @@
         <article><h3>Foco em bônus</h3><p>Escolha +15% XP, Capture Boost ou Secret Lure, ou deixe no automático. As 2 lives abertas vão para os canais mais perto da meta.</p></article>
         <article><h3>Prioridade para subs</h3><p>Quem é sub ganha o dobro de pontos no canal. Esses canais entram primeiro e ficam até sair do ar. Depois, as lives voltam para o bônus escolhido.</p></article>
         <article><h3>Modo leve</h3><p>As lives ocultas rodam em 160p, sem som, imagens ou anúncios, para gastar menos memória e internet.</p></article>
-        <article><h3>Sempre à mão</h3><p>Fica na bandeja, pode iniciar com o Windows e reabre as lives depois de uma queda.</p></article>
+        <article><h3>Sempre à mão</h3><p>Fica na bandeja, pode iniciar com o sistema e reabre as lives depois de uma queda.</p></article>
         <article><h3>Chat em abas</h3><p>Acompanhe os streamers parceiros, envie mensagens e veja os resgates, como no Chatterino.</p></article>
         <article><h3>Painel de pontos</h3><p>Veja saldo, ganho e status de cada canal, e abra a loja direto pelo app.</p></article>
         <article><h3>Avisos de bônus</h3><p>Receba uma notificação quando um canal alcançar a sua meta, e abra a loja com um clique.</p></article>
@@ -48,6 +52,7 @@
       <ol class="steps">
         <li>Baixe o instalador acima.</li>
         <li>Se o Windows mostrar "O Windows protegeu o computador", clique em <strong>Mais informações</strong> e depois em <strong>Executar assim mesmo</strong>. O aviso aparece porque o app ainda não tem assinatura digital.</li>
+        <li>No Linux, o AppImage precisa de permissão para rodar: clique com o botão direito, abra Propriedades e marque <strong>Permitir executar como programa</strong> (ou rode <code>chmod +x Kickterino-linux.AppImage</code>). Se ele não abrir, instale o pacote <code>libfuse2</code>. O .deb instala com dois cliques.</li>
         <li>Abra o Kickterino e clique em <strong>Login Kick</strong>. Use Google, Apple, Discord ou e-mail e senha.</li>
         <li>Confira se a opção <strong>Farmar pontos</strong> está marcada e escolha seu bônus.</li>
       </ol>
@@ -57,7 +62,7 @@
       <h2>Sua conta fica com você</h2>
       <ul class="checks">
         <li>O login é feito na própria página da Kick, Google, Apple ou Discord. O app não lê nem guarda sua senha.</li>
-        <li>Não existe servidor do Kickterino. Sua sessão fica só no seu PC, com os cookies criptografados pelo Windows.</li>
+        <li>Não existe servidor do Kickterino. Sua sessão fica só no seu PC, com os cookies protegidos pelo sistema.</li>
         <li>Só a Kick e as páginas de login abrem dentro do app.</li>
         <li>O botão <strong>Sair da conta</strong> apaga do app todos os dados de login.</li>
         <li>O <a href="https://github.com/ViinniSantoos/kickterino">código é aberto</a>, para qualquer pessoa conferir.</li>
@@ -72,7 +77,7 @@
       <details><summary>Preciso deixar o app aberto na tela?</summary><p>Não. Pode minimizar ou fechar a janela: ele continua na bandeja, perto do relógio. Para sair de vez, clique com o botão direito no ícone e escolha Sair.</p></details>
       <details><summary>Sou sub de um canal. Muda alguma coisa?</summary><p>Sim. A Kick dá 20 pontos a cada 5 minutos para subs do canal, o dobro do normal. Com o Foco em bônus ligado, o app identifica esses canais da sua lista, marca com o selo SUB e dá prioridade a eles enquanto estiverem ao vivo, sem meta de bônus. Se o canal não estiver na lista, adicione pelo botão +.</p></details>
       <details><summary>Como compro os bônus?</summary><p>Clique no ícone de pontos ao lado do chat para abrir a loja do canal. A compra é sempre feita por você.</p></details>
-      <details><summary>Funciona em quais sistemas?</summary><p>Por enquanto, só no Windows.</p></details>
+      <details><summary>Funciona em quais sistemas?</summary><p>Windows 10 ou 11 e Linux 64 bits. No Linux, o AppImage roda sem instalar e se atualiza sozinho; o .deb é para Ubuntu, Debian e Mint e precisa ser baixado de novo a cada versão.</p></details>
     </section>
   </main>
 

@@ -1,7 +1,7 @@
 {
   "name": "kickterino",
   "productName": "Kickterino",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Cliente multi-chat da Kick (estilo Chatterino) que mantém você assistindo várias lives para acumular pontos do canal.",
   "author": "VinniiSaantos",
   "license": "MIT",
@@ -10,7 +10,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
   },
   "dependencies": {
     "electron-updater": "^6.6.2"
@@ -64,6 +65,25 @@
     },
     "portable": {
       "artifactName": "Kickterino-portatil.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Network",
+      "executableName": "kickterino",
+      "synopsis": "Chat e pontos da Kick para o PokeIdle",
+      "maintainer": "VinniiSaantos <122901997+ViinniSantoos@users.noreply.github.com>",
+      "syncDesktopName": true
+    },
+    "appImage": {
+      "artifactName": "Kickterino-linux.AppImage"
+    },
+    "deb": {
+      "artifactName": "Kickterino-linux.deb"
     }
-  }
+  },
+  "desktopName": "kickterino.desktop"
 }

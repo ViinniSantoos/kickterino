@@ -21,12 +21,13 @@
       <option value="500">+15% Capture Boost (500)</option>
       <option value="1000">+15% Secret Lure (1.000)</option>
     </select></label>
-    <label class="toggle" title="Abre sozinho, direto na bandeja, quando o Windows liga"><input type="checkbox" id="autostart"> Iniciar com o Windows</label>
+    <label class="toggle" id="autostart-label" title="Abre sozinho, direto na bandeja, quando o Windows liga"><input type="checkbox" id="autostart"> <span>Iniciar com o Windows</span></label>
     <label class="toggle" title="Avisa quando um canal alcança 300, 500 ou 1.000 pontos"><input type="checkbox" id="notify-bonus"> Avisar bônus</label>
     <button id="btn-refresh">Atualizar</button>
     <span id="summary"></span>
     <span id="memory" title="Memória total usada pelo Kickterino"></span>
     <button id="btn-panel" title="Painel de pontos">Pontos ▸</button>
+    <button id="btn-quit" title="Fecha o Kickterino de vez (para o farm)" hidden>Sair</button>
   </header>
 
   <nav id="tabs"></nav>

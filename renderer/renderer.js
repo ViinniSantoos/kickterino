@@ -223,6 +223,12 @@ function applyState(s) {
   $('#bonus-target').value = String(state.bonusTarget || 0);
   $('#bonus-target').disabled = !state.rotation;
   $('#autostart').checked = !!state.openAtLogin;
+  // No Linux a bandeja pode não aparecer (GNOME sem extensão), então o Sair fica também na janela.
+  if (state.platform === 'linux') {
+    $('#autostart-label span').textContent = 'Iniciar com o sistema';
+    $('#autostart-label').title = 'Abre sozinho, direto na bandeja, quando você entra no computador';
+    $('#btn-quit').hidden = false;
+  }
   $('#notify-bonus').checked = !!state.notifyBonus;
   $('#memory').textContent = state.memoryMB ? `${state.memoryMB} MB` : '';
   $('#btn-login').textContent = state.loggedIn ? 'Conectado ✓' : 'Login Kick';
@@ -241,6 +247,7 @@ $('#btn-refresh').onclick = async () => applyState(await window.kick.refresh());
 $('#farming').onchange = async (e) => applyState(await window.kick.setFarming(e.target.checked));
 $('#btn-limit').onclick = async () => applyState(await (state.limitTest ? window.kick.stopLimitTest() : window.kick.startLimitTest()));
 $('#autostart').onchange = async (e) => applyState(await window.kick.setAutostart(e.target.checked));
+$('#btn-quit').onclick = () => window.kick.quit();
 $('#notify-bonus').onchange = async (e) => applyState(await window.kick.setNotifyBonus(e.target.checked));
 $('#rotation').onchange = async (e) => applyState(await window.kick.setRotation(e.target.checked));
 $('#bonus-target').onchange = async (e) => applyState(await window.kick.setBonusTarget(Number(e.target.value)));

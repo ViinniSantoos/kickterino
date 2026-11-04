@@ -276,6 +276,9 @@ const userOpened = new WeakSet();
 // Janela "invisível": existe para o Windows (o vídeo é desenhado e anda de verdade, ao contrário
 // de uma janela oculta, que o Chromium congela), mas é transparente, não recebe cliques e não
 // aparece na barra de tarefas nem no Alt+Tab.
+// No Linux a transparência não existe (a janela apareceria na tela) e o Chromium não congela
+// janela oculta, então lá ela só fica escondida.
+const isLinux = process.platform === 'linux';
 function makeInvisible(win) {
   userOpened.delete(win);
   win.setOpacity(0);
@@ -283,7 +286,8 @@ function makeInvisible(win) {
   win.setFocusable(false);
   win.setSize(480, 270);
   win.setPosition(0, 0);
-  win.showInactive();
+  if (isLinux) win.hide();
+  else win.showInactive();
 }
 
 function startWatcher(slug) {
@@ -643,6 +647,7 @@ function snapshot() {
     limitTest: limitTestSnapshot(),
     limitResult: config.limitResult || null,
     openAtLogin: isOpenAtLogin(),
+    platform: process.platform,
     notifyBonus: config.notifyBonus,
     channels: config.channels.map((slug) => {
       const s = status.get(slug) || {};
@@ -720,7 +725,17 @@ function setFarming(on) {
 
 // O app portátil roda de uma pasta temporária: o que abre com o Windows é o .exe original.
 const LOGIN_ITEM = { path: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath, args: ['--hidden'] };
-const isOpenAtLogin = () => app.getLoginItemSettings(LOGIN_ITEM).openAtLogin;
+// No Linux, abrir com o sistema é um atalho na pasta autostart (o AppImage informa o próprio caminho).
+const autostartFile = () => path.join(process.env.XDG_CONFIG_HOME || path.join(app.getPath('home'), '.config'), 'autostart', 'kickterino.desktop');
+const isOpenAtLogin = () => (isLinux ? fs.existsSync(autostartFile()) : app.getLoginItemSettings(LOGIN_ITEM).openAtLogin);
+function setOpenAtLogin(on) {
+  if (!isLinux) return app.setLoginItemSettings({ ...LOGIN_ITEM, openAtLogin: on });
+  const file = autostartFile();
+  if (!on) return fs.rmSync(file, { force: true });
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const exe = process.env.APPIMAGE || process.execPath;
+  fs.writeFileSync(file, `[Desktop Entry]\nType=Application\nName=Kickterino\nExec="${exe}" --hidden\nIcon=kickterino\nX-GNOME-Autostart-enabled=true\n`);
+}
 
 function showMain() {
   if (!mainWin) return;
@@ -764,7 +779,8 @@ function recoverAfterResume() {
 // Atualização automática pelo GitHub Releases. A versão portátil não se atualiza sozinha.
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 function setupAutoUpdate() {
-  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_FILE) return;
+  // No Linux só o AppImage se atualiza sozinho; o .deb é atualizado baixando de novo.
+  if (!app.isPackaged || process.env.PORTABLE_EXECUTABLE_FILE || (isLinux && !process.env.APPIMAGE)) return;
   const check = () => autoUpdater.checkForUpdatesAndNotify().catch(() => {});
   autoUpdater.on('error', () => {}); // sem internet: tenta de novo na próxima rodada
   check();
@@ -783,7 +799,8 @@ ipcMain.handle('channels:remove', (_e, slug) => {
   return snapshot();
 });
 ipcMain.handle('farming:set', (_e, on) => { setFarming(on); return snapshot(); });
-ipcMain.handle('autostart:set', (_e, on) => { app.setLoginItemSettings({ ...LOGIN_ITEM, openAtLogin: !!on }); return snapshot(); });
+ipcMain.handle('autostart:set', (_e, on) => { try { setOpenAtLogin(!!on); } catch {} return snapshot(); });
+ipcMain.handle('app:quit', quitApp);
 ipcMain.handle('notifyBonus:set', (_e, on) => { config.notifyBonus = !!on; saveConfig(); return snapshot(); });
 ipcMain.handle('maxWatchers:set', (_e, n) => {
   limitTest = null; // mexer na mão cancela o teste de limite
@@ -879,7 +896,9 @@ app.whenReady().then(() => {
     if (!config.trayHintShown) {
       config.trayHintShown = true;
       saveConfig();
-      notify('O Kickterino continua farmando', 'Ele fica na bandeja, perto do relógio. Para sair de vez: botão direito no ícone > Sair.', showMain);
+      notify('O Kickterino continua farmando', isLinux
+        ? 'Ele fica na bandeja do sistema. Se o ícone não aparecer, abra o Kickterino de novo pelo menu de apps. Para sair de vez, use o botão Sair.'
+        : 'Ele fica na bandeja, perto do relógio. Para sair de vez: botão direito no ícone > Sair.', showMain);
     }
   });
   // Desligar ou reiniciar o Windows não pode ficar preso na janela escondida.
