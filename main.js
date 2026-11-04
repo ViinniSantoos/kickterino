@@ -3,7 +3,7 @@
 // uma janela oculta "api" em kick.com para consultar status/pontos, e uma janela
 // oculta e muda por canal AO VIVO tocando o player real — é isso que conta como "assistindo".
 const {
-  app, BrowserWindow, dialog, ipcMain, session, Tray, Menu, Notification, nativeImage, powerSaveBlocker, powerMonitor,
+  app, BrowserWindow, dialog, ipcMain, session, Tray, Menu, Notification, nativeImage, powerSaveBlocker, powerMonitor, net,
 } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
@@ -42,10 +42,17 @@ const DEFAULT_CONFIG = {
   rotation: true,
   bonusTarget: 0, // 0 = automático (300, 500, 1.000); ou o custo do único bônus que a pessoa quer
   notifyBonus: true,
+  notifyChat: true,  // menções ao seu nome e sorteios no chat
+  sleepMode: false,  // "antes de dormir": só aparece para quem ligar
+  favorites: [],
+  purchases: [],     // bônus comprados: { t, cost, slug } (cronômetro e relatório)
+  daily: {},         // pontos ganhos por dia: { 'AAAA-MM-DD': pts }
 };
 let config = { ...DEFAULT_CONFIG };
+let firstRun = false;
 
 function loadConfig() {
+  firstRun = !fs.existsSync(configPath());
   try { config = { ...DEFAULT_CONFIG, ...JSON.parse(fs.readFileSync(configPath(), 'utf8')) }; } catch {}
   // Canais oficiais novos de uma versão nova entram uma vez; os que a pessoa removeu não voltam.
   const seen = new Set(config.seenDefaults || config.channels);
@@ -186,17 +193,35 @@ function createApiWindow() {
 
 // Loja de pontos: o chat popout oficial da Kick, que tem o saldo e as recompensas do canal.
 const storeWindows = new Map();
-function openStore(slug) {
+function openStore(slug, title = `Pontos — ${slug}`) {
   let win = storeWindows.get(slug);
   if (win && !win.isDestroyed()) { win.show(); win.focus(); return; }
   win = new BrowserWindow({
-    width: 420, height: 720, title: `Pontos — ${slug}`, autoHideMenuBar: true, backgroundColor: '#0b0e0f',
+    width: 420, height: 720, title, autoHideMenuBar: true, backgroundColor: '#0b0e0f',
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: { partition: PARTITION },
   });
   win.loadURL(`${KICK}/popout/${slug}/chat`);
-  win.on('closed', () => { storeWindows.delete(slug); refreshChannel(slug).then(() => send('status', snapshot())); });
+  win.on('page-title-updated', (e) => e.preventDefault()); // mantém o "(2 de 4)" do modo antes de dormir
+  win.on('closed', () => {
+    storeWindows.delete(slug);
+    refreshChannel(slug).then(() => send('status', snapshot()));
+    if (storeSequence && storeSequence.current === slug) openNextStore();
+  });
   storeWindows.set(slug, win);
+}
+
+// Modo antes de dormir: abre as lojas uma de cada vez; a próxima abre quando a pessoa fecha a atual.
+let storeSequence = null;
+function openNextStore() {
+  const seq = storeSequence;
+  const slug = seq && seq.queue.shift();
+  if (!slug) { storeSequence = null; send('status', snapshot()); return; }
+  seq.current = slug;
+  seq.done++;
+  const name = (status.get(slug) || {}).displayName || slug;
+  openStore(slug, `Pontos — ${name} (${seq.done} de ${seq.total})`);
+  send('status', snapshot());
 }
 
 async function sessionToken() {
@@ -360,13 +385,144 @@ function checkBonus(slug, s) {
   s.bonusTier = tier;
 }
 
+// ---------- Bônus ativos, histórico e relatório ----------
+// Cada bônus dura 1 h e as horas compradas se somam. A compra é percebida pela queda do saldo:
+// entre duas leituras o saldo pode ter subido até ~25 pts, então vale a menor combinação de
+// bônus que explica a queda. Compras que a pessoa registra à mão entram igual.
+const BONUS_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const KEEP_PURCHASES_MS = 10 * DAY_MS;
+let configDirty = false;
+
+const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+function addDaily(n) {
+  const k = dayKey(Date.now());
+  config.daily[k] = (config.daily[k] || 0) + n;
+  configDirty = true;
+}
+
+function matchPurchase(drop) {
+  let best = null;
+  for (let c = 0; c <= 6; c++) for (let b = 0; b <= 6; b++) for (let a = 0; a <= 6; a++) {
+    const n = a + b + c, sum = 300 * a + 500 * b + 1000 * c;
+    if (!n || sum < drop || sum > drop + 25 || (best && n >= best.length)) continue;
+    best = [...Array(c).fill(1000), ...Array(b).fill(500), ...Array(a).fill(300)];
+  }
+  return best || [];
+}
+
+function registerPurchases(slug, drop) {
+  const now = Date.now();
+  matchPurchase(drop).forEach((cost, i) => config.purchases.push({ t: now + i, cost, slug }));
+  config.purchases = config.purchases.filter((p) => now - p.t < KEEP_PURCHASES_MS);
+  configDirty = true;
+}
+
+// Fim de cada bônus, somando as horas na ordem das compras.
+function bonusIntervals(purchases = config.purchases) {
+  const byCost = {};
+  for (const p of [...purchases].sort((a, b) => a.t - b.t)) {
+    const list = byCost[p.cost] || (byCost[p.cost] = []);
+    const last = list[list.length - 1];
+    if (last && last.end >= p.t) last.end += BONUS_MS;
+    else list.push({ start: p.t, end: p.t + BONUS_MS });
+  }
+  return byCost;
+}
+
+function activeBonuses(now = Date.now()) {
+  const byCost = bonusIntervals();
+  return BONUSES.map((b) => {
+    const cur = (byCost[b.cost] || []).find((i) => i.start <= now && i.end > now);
+    return { cost: b.cost, name: b.name, endsAt: cur ? cur.end : null };
+  });
+}
+
+// Aviso 5 min antes de cada bônus acabar (uma vez por fim de bônus).
+const warnedEnds = new Set();
+function checkBonusEnding() {
+  const now = Date.now();
+  for (const b of activeBonuses(now)) {
+    if (!b.endsAt || b.endsAt - now > 5 * 60 * 1000 || warnedEnds.has(`${b.cost}:${b.endsAt}`)) continue;
+    warnedEnds.add(`${b.cost}:${b.endsAt}`);
+    if (!config.notifyBonus) continue;
+    // Sugere o canal com mais pontos que ainda paga esse bônus.
+    const rich = config.channels.map((slug) => [slug, status.get(slug) || {}])
+      .filter(([, s]) => (s.points || 0) >= b.cost).sort((x, y) => y[1].points - x[1].points)[0];
+    notify(`Seu ${b.name} acaba em ${Math.max(1, Math.round((b.endsAt - now) / 60000))} min`,
+      rich ? `${rich[1].displayName || rich[0]} tem ${rich[1].points} pts. Clique para abrir a loja.` : 'Nenhum canal tem pontos para renovar agora.',
+      () => (rich ? openStore(rich[0]) : showMain()));
+  }
+}
+
+// Relatório dos últimos 7 dias: pontos por dia, compras e tempo com bônus ativo por período.
+const PERIODS = [['Madrugada', 0, 6], ['Dia', 6, 18], ['Noite', 18, 24]];
+function weeklyReport(now = Date.now()) {
+  const from = now - 7 * DAY_MS;
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const t = now - i * DAY_MS, k = dayKey(t);
+    const bought = config.purchases.filter((p) => dayKey(p.t) === k);
+    days.push({ day: k, weekday: new Date(t).toLocaleDateString('pt-BR', { weekday: 'short' }), gained: config.daily[k] || 0,
+      bought: BONUSES.map((b) => bought.filter((p) => p.cost === b.cost).length) });
+  }
+  // Minuto a minuto: há algum bônus ativo? (qualquer um dos três)
+  const all = Object.values(bonusIntervals()).flat();
+  const isOn = (t) => all.some((i) => i.start <= t && i.end > t);
+  const per = PERIODS.map(([name]) => ({ name, on: 0, total: 0 }));
+  let on = 0, total = 0;
+  for (let t = Math.ceil(from / 60000) * 60000; t < now; t += 60000) {
+    const h = new Date(t).getHours();
+    const p = per[PERIODS.findIndex(([, a, b]) => h >= a && h < b)];
+    const active = isOn(t);
+    p.total++; total++;
+    if (active) { p.on++; on++; }
+  }
+  // Últimas 24 h em blocos de 30 min, para a linha do tempo.
+  const timeline = [];
+  for (let i = 47; i >= 0; i--) timeline.push(isOn(now - i * 30 * 60000 - 15 * 60000));
+  const recent = config.purchases.filter((p) => p.t >= from);
+  return {
+    days, timeline, timelineStart: now - DAY_MS,
+    gained: days.reduce((t, d) => t + d.gained, 0),
+    bought: BONUSES.map((b) => ({ name: b.name, cost: b.cost, count: recent.filter((p) => p.cost === b.cost).length })),
+    bonusHours: Math.round(on / 60),
+    coverage: total ? Math.round((on / total) * 100) : 0,
+    periods: per.map((p) => ({ name: p.name, pct: p.total ? Math.round((p.on / p.total) * 100) : 0 })),
+    channels: new Set(recent.map((p) => p.slug).filter(Boolean)).size,
+  };
+}
+
+// Lista de parceiros no site: parceiro novo entra para todos sem precisar de versão nova.
+// Quem a pessoa removeu não volta (mesma regra dos canais padrão).
+const PARTNERS_URL = 'https://viinnisantoos.github.io/kickterino/parceiros.json';
+async function syncPartners() {
+  try {
+    const res = await net.fetch(PARTNERS_URL, { cache: 'no-store' });
+    if (!res.ok) return;
+    const list = ((await res.json()).channels || []).map(String).filter((s) => /^[a-z0-9_-]{2,30}$/.test(s)).slice(0, 60);
+    const seen = new Set(config.seenDefaults || []);
+    const fresh = list.filter((slug) => !seen.has(slug) && !config.channels.includes(slug));
+    config.seenDefaults = [...new Set([...seen, ...list])];
+    if (fresh.length) { config.channels.push(...fresh); poll(); }
+    saveConfig();
+  } catch {}
+}
+
 async function refreshChannel(slug) {
   const s = status.get(slug) || { watchedMs: 0 };
   try {
     const { status: code, json } = await kickFetch(`/api/v2/channels/${slug}`);
     if (code !== 200 || !json) throw new Error(`HTTP ${code}`);
     s.chatroomId = json.chatroom && json.chatroom.id;
+    const wasLive = s.live;
     s.live = !!json.livestream;
+    // Favorito que acabou de entrar ao vivo (no primeiro carregamento não avisa).
+    if (wasLive === false && s.live && config.favorites.includes(slug)) {
+      const name = (json.user && json.user.username) || slug;
+      notify(`★ ${name} entrou ao vivo`, json.livestream.session_title || 'Clique para abrir o chat.', () => { showMain(); send('select', slug); });
+    }
     s.viewers = json.livestream ? json.livestream.viewer_count : 0;
     s.title = json.livestream ? json.livestream.session_title : '';
     s.displayName = (json.user && json.user.username) || slug;
@@ -391,7 +547,9 @@ async function refreshChannel(slug) {
         if (s.points != null && p > s.points) {
           s.gainedTotal = (s.gainedTotal || 0) + (p - s.points);
           if (watchers.has(slug)) s.lastGainAt = Date.now();
+          addDaily(p - s.points);
         }
+        if (s.points != null && p < s.points) registerPurchases(slug, s.points - p);
         s.points = p;
         checkBonus(slug, s);
       }
@@ -649,6 +807,15 @@ function snapshot() {
     openAtLogin: isOpenAtLogin(),
     platform: process.platform,
     notifyBonus: config.notifyBonus,
+    notifyChat: config.notifyChat,
+    sleepMode: config.sleepMode,
+    favorites: config.favorites,
+    username,
+    version: app.getVersion(),
+    intro: config.lastSeenVersion === app.getVersion() ? null : (firstRun ? 'welcome' : 'news'),
+    bonuses: activeBonuses(now),
+    purchases: [...config.purchases].sort((a, b) => b.t - a.t).slice(0, 6),
+    storeSequence: storeSequence ? { done: storeSequence.done, total: storeSequence.total } : null,
     channels: config.channels.map((slug) => {
       const s = status.get(slug) || {};
       const watchedMs = (s.watchedMs || 0) + (s.watchingSince ? now - s.watchingSince : 0);
@@ -673,6 +840,18 @@ const POLL_STUCK_MS = 5 * 60 * 1000;
 let polling = false;
 let pollStartedAt = 0;
 let loggedIn = false;
+// Nome da conta logada: o chat destaca quando alguém menciona você.
+let username = null;
+async function fetchUsername() {
+  for (const p of ['/api/v1/user', '/api/v2/user']) {
+    try {
+      const { status: code, json } = await kickFetch(p);
+      const name = code === 200 && json && (json.username || (json.user && json.user.username));
+      if (name) return String(name);
+    } catch {}
+  }
+  return null;
+}
 async function poll() {
   if (polling && Date.now() - pollStartedAt < POLL_STUCK_MS) return;
   const startedAt = Date.now();
@@ -681,7 +860,10 @@ async function poll() {
   try {
     loggedIn = !!(await sessionToken());
     await withTimeout(apiReady, 5 * 1000); // sem a página da Kick não há o que consultar agora
+    if (!loggedIn) username = null;
+    else if (!username) username = await fetchUsername();
     for (const slug of config.channels) await refreshChannel(slug);
+    if (configDirty) { configDirty = false; saveConfig(); }
     // Nenhum canal respondeu: a página de consulta pode ter ficado velha, então renova.
     if (config.channels.length && config.channels.every((slug) => (status.get(slug) || {}).error) && !apiWin.isVisible()) {
       loadApi(LIGHT_URL);
@@ -750,10 +932,14 @@ function quitApp() {
 }
 
 let tray = null;
+const clock = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`; };
 function updateTray() {
   if (!tray) return;
   const gained = sumGained();
-  tray.setToolTip(`Kickterino — ${config.farming ? `${watchers.size} assistindo` : 'farm pausado'}${gained ? ` · +${gained} pts` : ''}`);
+  const now = Date.now();
+  const active = activeBonuses(now).filter((b) => b.endsAt).map((b) => `${b.name.replace('+15% ', '')} ${clock(b.endsAt - now)}`);
+  tray.setToolTip(`Kickterino — ${config.farming ? `${watchers.size} assistindo` : 'farm pausado'}${gained ? ` · +${gained} pts` : ''}`
+    + (active.length ? `\nBônus ativo: ${active.join(' · ')}` : ''));
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Abrir Kickterino', click: showMain },
     { label: 'Farmar pontos', type: 'checkbox', checked: config.farming, click: (item) => setFarming(item.checked) },
@@ -802,6 +988,43 @@ ipcMain.handle('farming:set', (_e, on) => { setFarming(on); return snapshot(); }
 ipcMain.handle('autostart:set', (_e, on) => { try { setOpenAtLogin(!!on); } catch {} return snapshot(); });
 ipcMain.handle('app:quit', quitApp);
 ipcMain.handle('notifyBonus:set', (_e, on) => { config.notifyBonus = !!on; saveConfig(); return snapshot(); });
+ipcMain.handle('notifyChat:set', (_e, on) => { config.notifyChat = !!on; saveConfig(); return snapshot(); });
+ipcMain.handle('sleepMode:set', (_e, on) => { config.sleepMode = !!on; saveConfig(); return snapshot(); });
+ipcMain.handle('favorite:toggle', (_e, slug) => {
+  if (!config.channels.includes(slug)) return snapshot();
+  config.favorites = config.favorites.includes(slug) ? config.favorites.filter((s) => s !== slug) : [...config.favorites, slug];
+  saveConfig();
+  return snapshot();
+});
+ipcMain.handle('purchase:add', (_e, cost) => {
+  if (BONUSES.some((b) => b.cost === cost)) { config.purchases.push({ t: Date.now(), cost, slug: null }); saveConfig(); }
+  updateTray();
+  return snapshot();
+});
+ipcMain.handle('purchase:remove', (_e, t) => { config.purchases = config.purchases.filter((p) => p.t !== t); saveConfig(); updateTray(); return snapshot(); });
+ipcMain.handle('stores:sequence', (_e, slugs) => {
+  const queue = (Array.isArray(slugs) ? slugs : []).filter((s) => config.channels.includes(s));
+  if (!queue.length) return snapshot();
+  storeSequence = { queue, total: queue.length, done: 0, current: null };
+  openNextStore();
+  return snapshot();
+});
+ipcMain.handle('stores:cancel', () => { if (storeSequence) storeSequence.queue = []; return snapshot(); });
+ipcMain.handle('report:get', () => weeklyReport());
+// Salva o card do relatório como imagem (o recorte é a área do card na janela).
+ipcMain.handle('report:save', async (_e, rect) => {
+  const r = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+  const image = await mainWin.webContents.capturePage(r);
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWin, {
+    title: 'Salvar resumo da semana',
+    defaultPath: path.join(app.getPath('pictures'), `kickterino-semana-${dayKey(Date.now())}.png`),
+    filters: [{ name: 'Imagem PNG', extensions: ['png'] }],
+  });
+  if (canceled || !filePath) return null;
+  fs.writeFileSync(filePath, image.toPNG());
+  return filePath;
+});
+ipcMain.handle('intro:done', () => { config.lastSeenVersion = app.getVersion(); firstRun = false; saveConfig(); return snapshot(); });
 ipcMain.handle('maxWatchers:set', (_e, n) => {
   limitTest = null; // mexer na mão cancela o teste de limite
   config.maxWatchers = Math.max(1, Math.min(30, Number(n) || 1)); saveConfig(); reconcileWatchers(); return snapshot();
@@ -915,6 +1138,9 @@ app.whenReady().then(() => {
   });
   setInterval(poll, POLL_MS);
   setInterval(() => send('status', snapshot()), 15 * 1000);
+  setInterval(() => { checkBonusEnding(); updateTray(); }, 30 * 1000);
+  setTimeout(syncPartners, 30 * 1000);
+  setInterval(syncPartners, 6 * 60 * 60 * 1000);
 });
 
 app.on('before-quit', () => { app.isQuitting = true; });

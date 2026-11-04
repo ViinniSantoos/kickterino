@@ -34,14 +34,25 @@ function appendContent(parent, content) {
   if (last < content.length) parent.append(content.slice(last));
 }
 
-function renderChat(data) {
+// Menção ao seu nome e sorteios ganham destaque (e aviso, se a janela não estiver à vista).
+const GIVEAWAY = /\b(sorteio|sorteando|giveaway|!sorteio|!giveaway|!sortear)\b/i;
+function chatFlags(data) {
+  const text = String(data.content || '');
+  const me = state.username && state.username.toLowerCase();
+  const mention = !!me && (data.sender && data.sender.username || '').toLowerCase() !== me
+    && new RegExp(`(^|[^a-z0-9_])@?${me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9_]|$)`, 'i').test(text);
+  return { mention, giveaway: GIVEAWAY.test(text) };
+}
+
+function renderChat(data, flags = {}) {
   const wrap = document.createDocumentFragment();
   const replyTo = data.metadata && data.metadata.original_sender;
   if (data.type === 'reply' && replyTo) {
     wrap.append(el('div', 'msg reply-to', `↪ respondendo @${replyTo.username}: ${(data.metadata.original_message || {}).content || ''}`));
   }
-  const row = el('div', 'msg');
+  const row = el('div', 'msg' + (flags.mention ? ' mention' : '') + (flags.giveaway ? ' giveaway' : ''));
   row.append(el('span', 'time', timeStr(new Date(data.created_at || Date.now()))));
+  if (flags.giveaway) row.append(el('span', 'badge giveaway-tag', '🎉 SORTEIO'));
   const identity = (data.sender && data.sender.identity) || {};
   for (const b of identity.badges || []) row.append(el('span', `badge ${b.type}`, b.text || b.type));
   const user = el('span', 'user', data.sender ? data.sender.username : '?');
@@ -79,11 +90,16 @@ function pushMessage(slug, node) {
 function renderTabs() {
   const nav = $('#tabs');
   nav.replaceChildren();
-  for (const ch of state.channels) {
+  // Favoritos primeiro (só na tela: a ordem da lista, usada sem o foco em bônus, não muda).
+  const favs = new Set(state.favorites || []);
+  const ordered = [...state.channels.filter((c) => favs.has(c.slug)), ...state.channels.filter((c) => !favs.has(c.slug))];
+  for (const ch of ordered) {
     const queued = ch.live && !ch.watching;
     const t = el('div', 'tab' + (ch.live ? ' live' : '') + (queued ? ' queued' : '') + (ch.ageGate ? ' age' : '') + (ch.slug === active ? ' active' : ''));
+    if (favs.has(ch.slug)) t.append(el('span', 'fav-star', '★ '));
     const name = el('span', unread.has(ch.slug) && ch.slug !== active ? 'unread' : '', ch.displayName);
     t.append(name);
+    if (ch.subscribed) { const s = el('span', 'tab-sub', 'SUB'); s.title = 'Você é sub: pontos em dobro'; t.append(s); }
     if (ch.live) t.append(el('span', 'dot'));
     t.title = !ch.live ? 'offline'
       : `AO VIVO · ${ch.viewers} espectadores\n${ch.title}`
@@ -123,6 +139,9 @@ function renderHeader() {
   const ch = state.channels.find((c) => c.slug === active);
   const title = $('#chat-title');
   title.replaceChildren();
+  const fav = !!ch && (state.favorites || []).includes(ch.slug);
+  $('#btn-fav').textContent = fav ? '★' : '☆';
+  $('#btn-fav').classList.toggle('on', fav);
   if (!ch) return;
   title.append(el('b', null, ch.displayName), ch.live ? ` · AO VIVO · ${ch.viewers} · ${ch.title}` : ' · offline');
   if (ch.ageGate) {
@@ -169,6 +188,19 @@ function renderLimitTest() {
   for (const line of resultLines(r.results)) info.append(el('div', null, line));
 }
 
+// Selo de sub: estrela + "SUB ×2" (o sub ganha pontos em dobro no canal).
+function subBadge() {
+  const b = el('span', 'sub-badge');
+  b.title = 'Você é sub: pontos em dobro aqui. Com o foco ligado, este canal vem primeiro enquanto estiver ao vivo.';
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  const star = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  star.setAttribute('d', 'M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3 6.1 20.6l1.3-6.6L2.5 9.4l6.6-.8z');
+  svg.append(star);
+  b.append(svg, el('span', null, 'SUB'), el('i', null, '×2'));
+  return b;
+}
+
 // ---------- Painel / status ----------
 function renderPanel() {
   const rows = $('#panel-rows');
@@ -193,15 +225,19 @@ function renderPanel() {
     if (ch.error) tdStatus.title = ch.error;
     const tdPts = el('td', null, ch.points != null ? ch.points.toLocaleString('pt-BR') : '—');
     if (ch.gained > 0) tdPts.append(' ', el('span', 'gain', `+${ch.gained}`));
+    const eta = etaText(ch);
+    if (eta) { const e = el('div', 'eta', eta); e.title = 'Previsão pelo ritmo da Kick: 10 pts a cada 5 min (20 para subs)'; tdPts.append(e); }
     const tdName = el('td', null, ch.displayName);
-    if (ch.following) { const f = el('span', 'follow', ' ♥'); f.title = 'Você segue este canal'; tdName.append(f); }
-    if (ch.subscribed) { const b = el('span', 'sub', ' SUB'); b.title = 'Você é sub: pontos em dobro aqui. Com o foco ligado, este canal vem primeiro enquanto estiver ao vivo.'; tdName.append(b); }
+    if (ch.following) { const f = el('span', 'follow', '♥'); f.title = 'Você segue este canal'; tdName.append(' ', f); }
+    if (ch.subscribed) tdName.append(' ', subBadge());
     tr.append(tdName, tdStatus, tdPts, el('td', null, `${ch.watchedMin} min`));
     tr.style.cursor = 'pointer';
     tr.onclick = () => select(ch.slug);
     rows.append(tr);
   }
   renderLimitTest();
+  renderBonusBox();
+  $('#sleep-box').hidden = !state.sleepMode;
   $('#summary').textContent = !state.loggedIn ? `${live} ao vivo · Faça login para farmar pontos` : `${live} ao vivo · ${watching} assistindo`
     + (queued ? (state.rotation ? ` · ${queued} na fila (foco no próximo bônus)` : ` · ${queued} sem vaga`) : '')
     + ` · ${totalPts.toLocaleString('pt-BR')} pts`
@@ -210,6 +246,7 @@ function renderPanel() {
 
 function applyState(s) {
   const prevLive = new Map(state.channels.map((c) => [c.slug, c.live]));
+  celebrate(state, s);
   state = s;
   for (const ch of state.channels) {
     const was = prevLive.get(ch.slug);
@@ -230,6 +267,10 @@ function applyState(s) {
     $('#btn-quit').hidden = false;
   }
   $('#notify-bonus').checked = !!state.notifyBonus;
+  $('#notify-chat').checked = !!state.notifyChat;
+  $('#sleep-mode').checked = !!state.sleepMode;
+  if (state.intro && !introShown) { introShown = true; showIntro(state.intro); }
+  if (!$('#modal').hidden && modalKind === 'sleep') renderSleepList();
   $('#memory').textContent = state.memoryMB ? `${state.memoryMB} MB` : '';
   $('#btn-login').textContent = state.loggedIn ? 'Conectado ✓' : 'Login Kick';
   $('#btn-login').classList.toggle('ok', !!state.loggedIn);
@@ -240,6 +281,252 @@ function applyState(s) {
   renderPanel();
 }
 
+// ---------- Bônus ativos e previsão ----------
+const clock = (ms) => { const m = Math.max(0, Math.ceil(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min`; };
+const shortName = (name) => name.replace('+15% ', '');
+
+// Previsão do próximo bônus no ritmo da Kick (10 pts a cada 5 min; sub ganha 20).
+function etaText(ch) {
+  if (!ch.watching || ch.earning === 'idle' || ch.goalLeft == null || ch.goalLeft <= 0) return '';
+  const min = Math.ceil(ch.goalLeft / (ch.subscribed ? 4 : 2));
+  return `⏱ ${clock(min * 60000)} → ${ch.goal.toLocaleString('pt-BR')}`;
+}
+
+function renderBonusBox() {
+  const box = $('#bonus-box');
+  box.replaceChildren();
+  const now = Date.now();
+  for (const b of state.bonuses || []) {
+    const on = b.endsAt && b.endsAt > now;
+    const chip = el('div', 'bonus-chip' + (on ? ' on' : ''));
+    chip.append(el('span', 'bonus-name', shortName(b.name)), el('span', 'bonus-left', on ? clock(b.endsAt - now) : 'inativo'));
+    const add = el('button', 'bonus-add', '+1h');
+    add.title = `Registrar uma compra de ${b.name} feita fora do app (o app percebe sozinho as compras pelo saldo)`;
+    add.onclick = async () => applyState(await window.kick.addPurchase(b.cost));
+    chip.append(add);
+    box.append(chip);
+  }
+  const recent = state.purchases || [];
+  if (recent.length) {
+    const list = el('div', 'purchases');
+    for (const p of recent) {
+      const name = (BONUS_NAMES[p.cost] || `${p.cost} pts`);
+      const ch = state.channels.find((c) => c.slug === p.slug);
+      const row = el('div', 'purchase', `${shortName(name)} · ${ch ? ch.displayName : 'registrado à mão'} · ${timeStr(new Date(p.t))}`);
+      const x = el('button', 'purchase-x', '✕');
+      x.title = 'Não foi uma compra de bônus? Remove do cronômetro e do relatório';
+      x.onclick = async () => applyState(await window.kick.removePurchase(p.t));
+      row.append(x);
+      list.append(row);
+    }
+    box.append(list);
+  }
+}
+const BONUS_NAMES = { 300: '+15% XP', 500: '+15% Capture Boost', 1000: '+15% Secret Lure' };
+setInterval(() => { if (!$('#panel').hidden) renderBonusBox(); }, 20 * 1000);
+
+// ---------- Janela flutuante (relatório, antes de dormir, boas-vindas) ----------
+let modalKind = null;
+let introShown = false;
+function openModal(kind, ...nodes) {
+  modalKind = kind;
+  $('#modal-card').replaceChildren(...nodes);
+  $('#modal').hidden = false;
+}
+function closeModal() {
+  if (modalKind === 'intro') window.kick.introDone().then(applyState);
+  modalKind = null;
+  $('#modal').hidden = true;
+}
+$('#modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
+const button = (text, cls, onclick) => { const b = el('button', cls, text); b.onclick = onclick; return b; };
+
+// Antes de dormir: canais com pontos para o bônus escolhido; as lojas abrem uma de cada vez.
+const sleepPicked = new Set();
+function renderSleepList() {
+  const cost = state.bonusTarget || 300;
+  const name = BONUS_NAMES[cost];
+  const rich = state.channels.filter((c) => (c.points || 0) >= cost).sort((a, b) => b.points - a.points);
+  for (const s of [...sleepPicked]) if (!rich.some((c) => c.slug === s)) sleepPicked.delete(s);
+  const wrap = el('div', 'sleep');
+  wrap.append(el('h3', null, '🌙 Antes de dormir'));
+  const seq = state.storeSequence;
+  if (seq) {
+    wrap.append(el('p', null, `Loja ${seq.done} de ${seq.total} aberta. Compre o bônus e feche a janela da loja: a próxima abre sozinha.`),
+      button('Parar sequência', null, async () => applyState(await window.kick.cancelStoreSequence())));
+    return $('#modal-card').replaceChildren(wrap);
+  }
+  if (!rich.length) {
+    wrap.append(el('p', null, `Nenhum canal tem ${cost} pts para ${name} agora.`), button('Fechar', null, closeModal));
+    return $('#modal-card').replaceChildren(wrap);
+  }
+  const total = rich.reduce((t, c) => t + Math.floor(c.points / cost), 0);
+  wrap.append(el('p', null, `Dá para comprar ${total} × ${name} (${total} h de bônus). Escolha os canais e as lojas abrem uma de cada vez: você compra e fecha a janela, e a próxima aparece.`));
+  const list = el('div', 'sleep-list');
+  for (const c of rich) {
+    const row = el('label', 'sleep-row');
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = sleepPicked.has(c.slug);
+    cb.onchange = () => { if (cb.checked) sleepPicked.add(c.slug); else sleepPicked.delete(c.slug); renderSleepList(); };
+    row.append(cb, el('span', null, c.displayName), el('span', 'sleep-pts', `${c.points.toLocaleString('pt-BR')} pts · ${Math.floor(c.points / cost)}×`));
+    list.append(row);
+  }
+  wrap.append(list);
+  const go = button(`Abrir ${sleepPicked.size} loja${sleepPicked.size === 1 ? '' : 's'} em sequência`, 'primary', async () => {
+    applyState(await window.kick.openStoreSequence(state.channels.filter((c) => sleepPicked.has(c.slug)).map((c) => c.slug)));
+  });
+  go.disabled = !sleepPicked.size;
+  const all = button('Marcar todos', null, () => { for (const c of rich) sleepPicked.add(c.slug); renderSleepList(); });
+  const actions = el('div', 'modal-actions');
+  actions.append(all, go, button('Fechar', null, closeModal));
+  wrap.append(actions);
+  $('#modal-card').replaceChildren(wrap);
+}
+
+// Relatório da semana, com opção de salvar o card como imagem para postar.
+async function showReport() {
+  const r = await window.kick.getReport();
+  const card = el('div', 'report');
+  const head = el('div', 'report-head');
+  head.append(el('span', 'brand', 'K'), el('b', null, ' Kickterino · minha semana'), el('span', 'report-date', new Date().toLocaleDateString('pt-BR')));
+  const big = el('div', 'report-big');
+  const stat = (value, label) => { const d = el('div', 'report-stat'); d.append(el('b', null, value), el('span', null, label)); return d; };
+  big.append(stat(r.gained.toLocaleString('pt-BR'), 'pontos ganhos'), stat(String(r.bought.reduce((t, b) => t + b.count, 0)), 'bônus comprados'),
+    stat(`${r.bonusHours} h`, 'com bônus ativo'), stat(`${r.coverage}%`, 'do tempo com bônus'));
+  const days = el('div', 'report-days');
+  const max = Math.max(1, ...r.days.map((d) => d.gained));
+  for (const d of r.days) {
+    const col = el('div', 'report-day');
+    col.title = `${d.day}: ${d.gained} pts · ${d.bought.map((n, i) => `${n}× ${shortName(Object.values(BONUS_NAMES)[i])}`).join(', ')}`;
+    const bar = el('i'); bar.style.height = `${Math.round((d.gained / max) * 100)}%`;
+    const slot = el('div', 'report-bar'); slot.append(bar);
+    col.append(el('small', null, d.gained ? d.gained.toLocaleString('pt-BR') : ''), slot, el('span', null, d.weekday.replace('.', '')));
+    days.append(col);
+  }
+  const periods = el('div', 'report-periods');
+  for (const p of r.periods) {
+    const row = el('div', 'report-period');
+    const track = el('div', 'track'); const fill = el('i'); fill.style.width = `${p.pct}%`; track.append(fill);
+    row.append(el('span', null, p.name), track, el('b', null, `${p.pct}%`));
+    periods.append(row);
+  }
+  const line = el('div', 'report-timeline');
+  line.title = 'Últimas 24 horas: verde = algum bônus ativo';
+  for (const on of r.timeline) line.append(el('i', on ? 'on' : ''));
+  const bought = el('div', 'report-bought', r.bought.map((b) => `${b.count}× ${shortName(b.name)}`).join(' · ') + (r.channels ? ` · em ${r.channels} canais` : ''));
+  card.append(head, big, el('h4', null, 'Pontos por dia'), days, el('h4', null, 'Bônus ativo por período'), periods,
+    el('h4', null, 'Últimas 24 h'), line, bought);
+  const actions = el('div', 'modal-actions');
+  actions.append(button('💾 Salvar imagem', 'primary', async () => {
+    const rect = card.getBoundingClientRect();
+    const file = await window.kick.saveReport({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+    if (file) actions.replaceChildren(el('span', 'saved', `Imagem salva em ${file}`), button('Fechar', null, closeModal));
+  }), button('Fechar', null, closeModal));
+  openModal('report', card, actions);
+}
+
+// Boas-vindas na primeira vez; depois de atualizar, o que há de novo.
+function showIntro(kind) {
+  const wrap = el('div', 'intro');
+  if (kind === 'welcome') {
+    wrap.append(el('h3', null, 'Bem-vindo ao Kickterino 👋'));
+    const steps = [
+      ['1. Faça login', 'Clique em Login Kick e entre com sua conta (e-mail, Google, Apple ou Discord).'],
+      ['2. Escolha seu bônus', 'Em Bônus, deixe Automático ou escolha XP, Capture Boost ou Secret Lure.'],
+      ['3. Acompanhe no painel', 'Em Pontos ▸ você vê o saldo de cada canal, a previsão do próximo bônus e quanto tempo falta no seu bônus ativo.'],
+      ['4. Compre na loja', 'O ícone de pontos ao lado do chat abre a loja do canal. A compra é sempre feita por você.'],
+    ];
+    for (const [t, d] of steps) { const s = el('div', 'intro-step'); s.append(el('b', null, t), el('span', null, d)); wrap.append(s); }
+  } else {
+    wrap.append(el('h3', null, `Novidades da versão ${state.version} ✨`));
+    const news = [
+      '⏱ Bônus ativos: o app percebe a compra pelo saldo, mostra quanto tempo falta e avisa 5 min antes de acabar.',
+      '🔮 Previsão: cada canal mostra em quanto tempo chega ao próximo bônus.',
+      '📊 Relatório da semana, com imagem pronta para compartilhar.',
+      '🌙 Modo antes de dormir (opcional): abre as lojas uma de cada vez para empilhar bônus.',
+      '★ Favoritos: ficam no começo das abas e avisam quando entram ao vivo.',
+      '🎉 Destaque e aviso quando alguém menciona você ou quando aparece um sorteio no chat.',
+      '🤝 Novos parceiros do PokeIdle entram sozinhos na sua lista.',
+    ];
+    const ul = el('ul');
+    for (const n of news) ul.append(el('li', null, n));
+    wrap.append(ul);
+  }
+  const actions = el('div', 'modal-actions');
+  actions.append(button('Entendi', 'primary', closeModal));
+  wrap.append(actions);
+  openModal('intro', wrap);
+}
+
+// Aviso de menção ou sorteio quando a janela não está à vista (no máximo um por canal a cada 5 min para sorteio).
+const lastGiveawayAlert = new Map();
+function chatAlert(slug, data, flags) {
+  if (!state.notifyChat) return;
+  const ch = state.channels.find((c) => c.slug === slug);
+  const name = ch ? ch.displayName : slug;
+  const visible = document.hasFocus() && slug === active;
+  if (visible) return;
+  if (flags.giveaway && !flags.mention) {
+    if (Date.now() - (lastGiveawayAlert.get(slug) || 0) < 5 * 60 * 1000) return;
+    lastGiveawayAlert.set(slug, Date.now());
+  }
+  const n = new Notification(flags.mention ? `${data.sender.username} mencionou você em ${name}` : `🎉 Sorteio no chat de ${name}`,
+    { body: String(data.content || '').replace(/\[emote:\d+:([^\]]*)\]/g, '$1').slice(0, 140), icon: '../build/icon.png' });
+  n.onclick = () => { window.focus(); select(slug); };
+}
+
+// ---------- Comemorações: aviso na tela e confete ----------
+function toast(text, cls = '') {
+  const t = el('div', `toast ${cls}`, text);
+  $('#toasts').append(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, 5000);
+}
+
+const CONFETTI_COLORS = ['#53fc18', '#ffcf4a', '#b65ad2', '#ffffff', '#4fc3ff'];
+function confetti() {
+  const c = $('#confetti');
+  const ctx = c.getContext('2d');
+  c.width = innerWidth; c.height = innerHeight;
+  const parts = Array.from({ length: 140 }, () => ({
+    x: innerWidth / 2 + (Math.random() - .5) * 200, y: innerHeight * .35,
+    vx: (Math.random() - .5) * 14, vy: -Math.random() * 12 - 4, r: Math.random() * 6 + 3,
+    rot: Math.random() * 6, vr: (Math.random() - .5) * .3, color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+  }));
+  const start = performance.now();
+  const frame = (t) => {
+    ctx.clearRect(0, 0, c.width, c.height);
+    const life = (t - start) / 2200;
+    for (const p of parts) {
+      p.vy += .35; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - life); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.color; ctx.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / 2); ctx.restore();
+    }
+    if (life < 1) requestAnimationFrame(frame); else ctx.clearRect(0, 0, c.width, c.height);
+  };
+  requestAnimationFrame(frame);
+}
+
+// Canal que passou de um bônus (300, 500, 1.000 e cada milhar) ganha confete; compra nova ganha aviso.
+const tierOf = (p) => (p >= 1000 ? 2 + Math.floor(p / 1000) : [300, 500].filter((c) => p >= c).length);
+function celebrate(prev, next) {
+  if (!prev.channels.length) return;
+  const before = new Map(prev.channels.map((c) => [c.slug, c.points]));
+  for (const ch of next.channels) {
+    const was = before.get(ch.slug);
+    if (was == null || ch.points == null || tierOf(ch.points) <= tierOf(was)) continue;
+    const reached = [300, 500, 1000].filter((c) => was < c && ch.points >= c).pop() || Math.floor(ch.points / 1000) * 1000;
+    toast(`🎉 ${ch.displayName} chegou a ${reached.toLocaleString('pt-BR')} pts! Já dá para comprar bônus.`, 'gold');
+    confetti();
+  }
+  const lastBefore = (prev.purchases || [])[0];
+  for (const p of next.purchases || []) {
+    if (lastBefore && p.t <= lastBefore.t) break;
+    if (!prev.purchases) break;
+    const ch = next.channels.find((c) => c.slug === p.slug);
+    toast(`⏱ +1h de ${BONUS_NAMES[p.cost] || 'bônus'}${ch ? ` (${ch.displayName})` : ''} no cronômetro`);
+  }
+}
+
 // ---------- Eventos ----------
 $('#btn-login').onclick = () => window.kick.showLogin();
 $('#btn-logout').onclick = async () => applyState(await window.kick.logout());
@@ -248,6 +535,11 @@ $('#farming').onchange = async (e) => applyState(await window.kick.setFarming(e.
 $('#btn-limit').onclick = async () => applyState(await (state.limitTest ? window.kick.stopLimitTest() : window.kick.startLimitTest()));
 $('#autostart').onchange = async (e) => applyState(await window.kick.setAutostart(e.target.checked));
 $('#btn-quit').onclick = () => window.kick.quit();
+$('#notify-chat').onchange = async (e) => applyState(await window.kick.setNotifyChat(e.target.checked));
+$('#sleep-mode').onchange = async (e) => applyState(await window.kick.setSleepMode(e.target.checked));
+$('#btn-sleep').onclick = () => { openModal('sleep'); renderSleepList(); };
+$('#btn-report').onclick = showReport;
+$('#btn-fav').onclick = async () => active && applyState(await window.kick.toggleFavorite(active));
 $('#notify-bonus').onchange = async (e) => applyState(await window.kick.setNotifyBonus(e.target.checked));
 $('#rotation').onchange = async (e) => applyState(await window.kick.setRotation(e.target.checked));
 $('#bonus-target').onchange = async (e) => applyState(await window.kick.setBonusTarget(Number(e.target.value)));
@@ -280,8 +572,13 @@ $('#composer').onsubmit = async (e) => {
 };
 
 window.kick.onStatus(applyState);
+window.kick.onSelect((slug) => select(slug));
 window.kick.onChat(({ slug, kind, data }) => {
-  if (kind === 'message') pushMessage(slug, renderChat(data));
+  if (kind === 'message') {
+    const flags = chatFlags(data);
+    pushMessage(slug, renderChat(data, flags));
+    if (flags.mention || flags.giveaway) chatAlert(slug, data, flags);
+  }
   else if (kind === 'reward') pushMessage(slug, systemMessage(`🎁 ${data.username} resgatou "${data.reward_title}"`));
 });
 window.kick.getState().then((s) => { applyState(s); if (active) select(active); });
