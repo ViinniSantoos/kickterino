@@ -444,13 +444,7 @@ function showIntro(kind) {
   } else {
     wrap.append(el('h3', null, `Novidades da versão ${state.version} ✨`));
     const news = [
-      '⏱ Bônus ativos: o app percebe a compra pelo saldo, mostra quanto tempo falta e avisa 5 min antes de acabar.',
-      '🔮 Previsão: cada canal mostra em quanto tempo chega ao próximo bônus.',
-      '📊 Relatório da semana, com imagem pronta para compartilhar.',
-      '🌙 Modo antes de dormir (opcional): abre as lojas uma de cada vez para empilhar bônus.',
-      '★ Favoritos: ficam no começo das abas e avisam quando entram ao vivo.',
-      '🎉 Destaque e aviso quando alguém menciona você ou quando aparece um sorteio no chat.',
-      '🤝 Novos parceiros do PokeIdle entram sozinhos na sua lista.',
+      "🧹 Painel mais limpo: o \"+X\" de pontos ganhos aparece só nas lives tocando, zera quando você gasta pontos no canal e na virada do dia. Dá para mostrar sempre ou esconder em configurações, e tem o botão \"Zerar +X\".",
     ];
     const ul = el('ul');
     for (const n of news) ul.append(el('li', null, n));
