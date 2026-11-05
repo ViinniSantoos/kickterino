@@ -862,6 +862,7 @@ function resetGainsOnNewDay() {
   if (gainDay && gainDay !== today) for (const s of status.values()) s.gainShown = 0;
   gainDay = today;
 }
+let pollFailures = 0;
 async function poll() {
   if (polling && Date.now() - pollStartedAt < POLL_STUCK_MS) return;
   const startedAt = Date.now();
@@ -883,6 +884,7 @@ async function poll() {
     reconcileWatchers();
     await checkPlayers();
     logHistory();
+    pollFailures = 0;
     send('status', snapshot());
     updateTray();
     if (process.env.KICKTERINO_DEBUG) {
@@ -894,8 +896,13 @@ async function poll() {
       }
       for (const m of app.getAppMetrics()) console.log(`PROC ${m.type} ${Math.round(m.memory.workingSetSize / 1024)}MB`);
     }
-  } catch {
-    // Kick ou internet fora do ar: a próxima rodada tenta de novo.
+  } catch (e) {
+    if (process.env.KICKTERINO_DEBUG) console.log('POLL ERROR', e && e.stack);
+    // Kick ou internet fora do ar: a próxima rodada tenta de novo. Mas se a página de consulta
+    // morreu sem avisar (PC suspendeu, rede caiu), ela nunca mais responde e toda rodada pararia
+    // aqui: depois de 2 falhas seguidas, recarrega a página.
+    pollFailures++;
+    if (pollFailures >= 2 && apiWin && !apiWin.isDestroyed() && !apiWin.isVisible()) { pollFailures = 0; loadApi(LIGHT_URL); }
   } finally { if (pollStartedAt === startedAt) polling = false; }
 }
 
