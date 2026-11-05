@@ -444,7 +444,7 @@ function showIntro(kind) {
   } else {
     wrap.append(el('h3', null, `Novidades da versão ${state.version} ✨`));
     const news = [
-      "🧹 Painel mais limpo: o \"+X\" de pontos ganhos aparece só nas lives tocando, zera quando você gasta pontos no canal e na virada do dia. Dá para mostrar sempre ou esconder em configurações, e tem o botão \"Zerar +X\".",
+      "🛠 Mais estável: se a internet cair ou o PC suspender, o app volta a juntar pontos sozinho (antes podia ficar parado até ser reaberto).", "🧹 Painel mais limpo: o \"+X\" de pontos ganhos aparece só nas lives tocando, zera quando você gasta pontos no canal e na virada do dia. Dá para mostrar sempre ou esconder em configurações, e tem o botão \"Zerar +X\".",
     ];
     const ul = el('ul');
     for (const n of news) ul.append(el('li', null, n));
