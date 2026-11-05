@@ -202,6 +202,9 @@ function subBadge() {
 }
 
 // ---------- Painel / status ----------
+// "+X" ao lado do saldo: só nas lives tocando (padrão), sempre ou nunca (configurações).
+const showGain = (ch) => state.gainDisplay === 'always' || (state.gainDisplay !== 'never' && ch.watching);
+
 function renderPanel() {
   const rows = $('#panel-rows');
   rows.replaceChildren();
@@ -224,7 +227,7 @@ function renderPanel() {
     const tdStatus = el('td'); tdStatus.append(st);
     if (ch.error) tdStatus.title = ch.error;
     const tdPts = el('td', null, ch.points != null ? ch.points.toLocaleString('pt-BR') : '—');
-    if (ch.gained > 0) tdPts.append(' ', el('span', 'gain', `+${ch.gained}`));
+    if (ch.gained > 0 && showGain(ch)) { const g = el('span', 'gain', `+${ch.gained}`); g.title = 'Pontos ganhos desde a última vez que você gastou pontos neste canal (zera na compra e na virada do dia)'; tdPts.append(' ', g); }
     const eta = etaText(ch);
     if (eta) { const e = el('div', 'eta', eta); e.title = 'Previsão pelo ritmo da Kick: 10 pts a cada 5 min (20 para subs)'; tdPts.append(e); }
     const tdName = el('td', null, ch.displayName);
@@ -268,6 +271,7 @@ function applyState(s) {
   }
   $('#notify-bonus').checked = !!state.notifyBonus;
   $('#notify-chat').checked = !!state.notifyChat;
+  $('#gain-display').value = state.gainDisplay || 'watching';
   $('#sleep-mode').checked = !!state.sleepMode;
   if (state.intro && !introShown) { introShown = true; showIntro(state.intro); }
   if (!$('#modal').hidden && modalKind === 'sleep') renderSleepList();
@@ -536,6 +540,8 @@ $('#btn-limit').onclick = async () => applyState(await (state.limitTest ? window
 $('#autostart').onchange = async (e) => applyState(await window.kick.setAutostart(e.target.checked));
 $('#btn-quit').onclick = () => window.kick.quit();
 $('#notify-chat').onchange = async (e) => applyState(await window.kick.setNotifyChat(e.target.checked));
+$('#gain-display').onchange = async (e) => applyState(await window.kick.setGainDisplay(e.target.value));
+$('#btn-reset-gains').onclick = async () => applyState(await window.kick.resetGains());
 $('#sleep-mode').onchange = async (e) => applyState(await window.kick.setSleepMode(e.target.checked));
 $('#btn-sleep').onclick = () => { openModal('sleep'); renderSleepList(); };
 $('#btn-report').onclick = showReport;

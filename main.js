@@ -45,6 +45,7 @@ const DEFAULT_CONFIG = {
   notifyChat: true,  // menções ao seu nome e sorteios no chat
   sleepMode: false,  // "antes de dormir": só aparece para quem ligar
   favorites: [],
+  gainDisplay: 'watching', // "+X" ao lado do saldo: 'watching' (só nas lives tocando), 'always' ou 'never'
   purchases: [],     // bônus comprados: { t, cost, slug } (cronômetro e relatório)
   daily: {},         // pontos ganhos por dia: { 'AAAA-MM-DD': pts }
 };
@@ -546,10 +547,12 @@ async function refreshChannel(slug) {
         // Ganho de assistir (gastos na loja fazem o saldo cair e não contam).
         if (s.points != null && p > s.points) {
           s.gainedTotal = (s.gainedTotal || 0) + (p - s.points);
+          s.gainShown = (s.gainShown || 0) + (p - s.points); // o "+X" da tela
           if (watchers.has(slug)) s.lastGainAt = Date.now();
           addDaily(p - s.points);
         }
-        if (s.points != null && p < s.points) registerPurchases(slug, s.points - p);
+        // Gastou pontos (bônus ou outra recompensa): o "+X" daquele canal recomeça do zero.
+        if (s.points != null && p < s.points) { s.gainShown = 0; registerPurchases(slug, s.points - p); }
         s.points = p;
         checkBonus(slug, s);
       }
@@ -814,6 +817,7 @@ function snapshot() {
     version: app.getVersion(),
     intro: config.lastSeenVersion === app.getVersion() ? null : (firstRun ? 'welcome' : 'news'),
     bonuses: activeBonuses(now),
+    gainDisplay: config.gainDisplay,
     purchases: [...config.purchases].sort((a, b) => b.t - a.t).slice(0, 6),
     storeSequence: storeSequence ? { done: storeSequence.done, total: storeSequence.total } : null,
     channels: config.channels.map((slug) => {
@@ -824,7 +828,7 @@ function snapshot() {
         title: s.title || '', chatroomId: s.chatroomId || null, points: s.points ?? null,
         watching: watchers.has(slug), ageGate: !!s.ageGate, earning: earningState(slug, now),
         following: s.following ?? null, subscribed: !!s.subscribed,
-        gained: s.gainedTotal || 0,
+        gained: s.gainShown || 0,
         goal: s.points != null ? goalRank(s.points).goal : null,
         goalLeft: s.points != null ? goalRank(s.points).left : null,
         watchedMin: Math.floor(watchedMs / 60000), error: s.error || null,
@@ -852,6 +856,12 @@ async function fetchUsername() {
   }
   return null;
 }
+let gainDay = null;
+function resetGainsOnNewDay() {
+  const today = new Date().toDateString();
+  if (gainDay && gainDay !== today) for (const s of status.values()) s.gainShown = 0;
+  gainDay = today;
+}
 async function poll() {
   if (polling && Date.now() - pollStartedAt < POLL_STUCK_MS) return;
   const startedAt = Date.now();
@@ -868,6 +878,7 @@ async function poll() {
     if (config.channels.length && config.channels.every((slug) => (status.get(slug) || {}).error) && !apiWin.isVisible()) {
       loadApi(LIGHT_URL);
     }
+    resetGainsOnNewDay();
     advanceLimitTest();
     reconcileWatchers();
     await checkPlayers();
@@ -974,6 +985,8 @@ function setupAutoUpdate() {
 }
 
 ipcMain.handle('state:get', () => snapshot());
+ipcMain.handle('gainDisplay:set', (_e, v) => { config.gainDisplay = ['watching', 'always', 'never'].includes(v) ? v : 'watching'; saveConfig(); return snapshot(); });
+ipcMain.handle('gains:reset', () => { for (const s of status.values()) s.gainShown = 0; return snapshot(); });
 ipcMain.handle('channels:add', async (_e, slug) => {
   slug = String(slug || '').trim().toLowerCase().replace(/^https?:\/\/(www\.)?kick\.com\//, '').replace(/[^a-z0-9_-]/g, '');
   if (slug && !config.channels.includes(slug)) { config.channels.push(slug); saveConfig(); poll(); }

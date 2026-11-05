@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('kick', {
   getReport: () => ipcRenderer.invoke('report:get'),
   saveReport: (rect) => ipcRenderer.invoke('report:save', rect),
   introDone: () => ipcRenderer.invoke('intro:done'),
+  setGainDisplay: (v) => ipcRenderer.invoke('gainDisplay:set', v),
+  resetGains: () => ipcRenderer.invoke('gains:reset'),
   onSelect: (cb) => ipcRenderer.on('select', (_e, slug) => cb(slug)),
   onStatus: (cb) => ipcRenderer.on('status', (_e, s) => cb(s)),
   onChat: (cb) => ipcRenderer.on('chat', (_e, m) => cb(m)),
